@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: java-crud
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/crud_db}
+    username: ${DB_USER:crud_user}
+    password: ${DB_PASSWORD:crud_pass}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+server:
+  port: ${PORT:8080}
+
+# Desativa o logging padrão do Spring Boot para usar o logback-spring.xml
+logging:
+  config: classpath:logback-spring.xml
+  level:
+    root: INFO
+    com.example.crud: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

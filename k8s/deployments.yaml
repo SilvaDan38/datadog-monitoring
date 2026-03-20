@@ -1,0 +1,387 @@
+---
+# deployments.yaml — todos os serviços CRUD no Kubernetes
+# O Datadog Admission Controller injeta automaticamente as variáveis DD_*
+# se o namespace tiver: admission.datadoghq.com/enabled: "true"
+
+# ─── PostgreSQL ───────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: datadog-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels:
+        app: postgres
+        tags.datadoghq.com/env:     kubernetes
+        tags.datadoghq.com/service: postgresql
+        tags.datadoghq.com/version: "16"
+      annotations:
+        # DBM — autodiscovery para o agente
+        ad.datadoghq.com/postgres.checks: |
+          {
+            "postgres": {
+              "init_config": {},
+              "instances": [{
+                "host": "%%host%%",
+                "port": "5432",
+                "username": "user",
+                "password": "password",
+                "dbname": "crud_db",
+                "collect_activity_metrics": true,
+                "collect_database_size_metrics": true
+              }]
+            }
+          }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - { name: POSTGRES_DB,       value: crud_db }
+            - { name: POSTGRES_USER,     value: user }
+            - { name: POSTGRES_PASSWORD, value: password }
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: pg-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: pg-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: datadog-monitoring
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: datadog-monitoring
+spec:
+  selector: { app: postgres }
+  ports:
+    - port: 5432
+      targetPort: 5432
+
+---
+# ─── Python CRUD ──────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-crud
+  namespace: datadog-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: python-crud }
+  template:
+    metadata:
+      labels:
+        app: python-crud
+        # Tags unificadas Datadog
+        tags.datadoghq.com/env:     kubernetes
+        tags.datadoghq.com/service: python-crud
+        tags.datadoghq.com/version: "1.0.0"
+      annotations:
+        ad.datadoghq.com/python-crud.logs: '[{"source":"python","service":"python-crud"}]'
+    spec:
+      containers:
+        - name: python-crud
+          image: python-crud:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - { name: DATABASE_URL, value: postgresql://user:password@postgres:5432/crud_db }
+            - { name: DD_SERVICE,   value: python-crud }
+            - { name: DD_ENV,       value: kubernetes }
+            - { name: DD_VERSION,   value: "1.0.0" }
+            - { name: DD_AGENT_HOST,
+                valueFrom: { fieldRef: { fieldPath: status.hostIP } } }
+            - { name: DD_TRACE_AGENT_PORT,        value: "8126" }
+            - { name: DD_LOGS_INJECTION,           value: "true" }
+            - { name: DD_PROFILING_ENABLED,        value: "true" }
+            - { name: DD_RUNTIME_METRICS_ENABLED,  value: "true" }
+            - { name: DD_DBM_PROPAGATION_MODE,     value: full }
+            - { name: DD_APPSEC_ENABLED,           value: "true" }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-crud
+  namespace: datadog-monitoring
+spec:
+  selector: { app: python-crud }
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# ─── Node.js CRUD ─────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodejs-crud
+  namespace: datadog-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: nodejs-crud }
+  template:
+    metadata:
+      labels:
+        app: nodejs-crud
+        tags.datadoghq.com/env:     kubernetes
+        tags.datadoghq.com/service: nodejs-crud
+        tags.datadoghq.com/version: "1.0.0"
+      annotations:
+        ad.datadoghq.com/nodejs-crud.logs: '[{"source":"nodejs","service":"nodejs-crud"}]'
+    spec:
+      containers:
+        - name: nodejs-crud
+          image: nodejs-crud:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - { name: DATABASE_URL, value: postgresql://user:password@postgres:5432/crud_db }
+            - { name: DD_SERVICE,   value: nodejs-crud }
+            - { name: DD_ENV,       value: kubernetes }
+            - { name: DD_VERSION,   value: "1.0.0" }
+            - { name: DD_AGENT_HOST,
+                valueFrom: { fieldRef: { fieldPath: status.hostIP } } }
+            - { name: DD_TRACE_AGENT_PORT,       value: "8126" }
+            - { name: DD_LOGS_INJECTION,          value: "true" }
+            - { name: DD_PROFILING_ENABLED,       value: "true" }
+            - { name: DD_DBM_PROPAGATION_MODE,    value: full }
+            - { name: DD_APPSEC_ENABLED,          value: "true" }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          readinessProbe:
+            httpGet: { path: /health, port: 3000 }
+          livenessProbe:
+            httpGet: { path: /health, port: 3000 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodejs-crud
+  namespace: datadog-monitoring
+spec:
+  selector: { app: nodejs-crud }
+  ports: [{ port: 80, targetPort: 3000 }]
+
+---
+# ─── Java CRUD ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-crud
+  namespace: datadog-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: java-crud }
+  template:
+    metadata:
+      labels:
+        app: java-crud
+        tags.datadoghq.com/env:     kubernetes
+        tags.datadoghq.com/service: java-crud
+        tags.datadoghq.com/version: "1.0.0"
+      annotations:
+        ad.datadoghq.com/java-crud.logs: '[{"source":"java","service":"java-crud"}]'
+    spec:
+      containers:
+        - name: java-crud
+          image: java-crud:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - { name: DD_SERVICE, value: java-crud }
+            - { name: DD_ENV,     value: kubernetes }
+            - { name: DD_VERSION, value: "1.0.0" }
+            - { name: DD_AGENT_HOST,
+                valueFrom: { fieldRef: { fieldPath: status.hostIP } } }
+            - { name: DD_PROFILING_ENABLED,      value: "true" }
+            - { name: DD_DBM_PROPAGATION_MODE,   value: full }
+            - { name: DD_APPSEC_ENABLED,         value: "true" }
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits:   { cpu: 1000m, memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8080 }
+            initialDelaySeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-crud
+  namespace: datadog-monitoring
+spec:
+  selector: { app: java-crud }
+  ports: [{ port: 80, targetPort: 8080 }]
+
+---
+# ─── .NET CRUD ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dotnet-crud
+  namespace: datadog-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: dotnet-crud }
+  template:
+    metadata:
+      labels:
+        app: dotnet-crud
+        tags.datadoghq.com/env:     kubernetes
+        tags.datadoghq.com/service: dotnet-crud
+        tags.datadoghq.com/version: "1.0.0"
+      annotations:
+        ad.datadoghq.com/dotnet-crud.logs: '[{"source":"dotnet","service":"dotnet-crud"}]'
+    spec:
+      containers:
+        - name: dotnet-crud
+          image: dotnet-crud:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - { name: DD_SERVICE, value: dotnet-crud }
+            - { name: DD_ENV,     value: kubernetes }
+            - { name: DD_VERSION, value: "1.0.0" }
+            - { name: DD_AGENT_HOST,
+                valueFrom: { fieldRef: { fieldPath: status.hostIP } } }
+            - { name: CORECLR_ENABLE_PROFILING, value: "1" }
+            - { name: CORECLR_PROFILER,
+                value: "{846F5F1C-F9AE-4B07-969E-05C26BC060D8}" }
+            - { name: CORECLR_PROFILER_PATH,
+                value: /opt/datadog/Datadog.Trace.ClrProfiler.Native.so }
+            - { name: DD_DOTNET_TRACER_HOME,    value: /opt/datadog }
+            - { name: DD_DBM_PROPAGATION_MODE,  value: full }
+            - { name: DD_APPSEC_ENABLED,        value: "true" }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dotnet-crud
+  namespace: datadog-monitoring
+spec:
+  selector: { app: dotnet-crud }
+  ports: [{ port: 80, targetPort: 8080 }]
+
+---
+# ─── Ruby CRUD ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruby-crud
+  namespace: datadog-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: ruby-crud }
+  template:
+    metadata:
+      labels:
+        app: ruby-crud
+        tags.datadoghq.com/env:     kubernetes
+        tags.datadoghq.com/service: ruby-crud
+        tags.datadoghq.com/version: "1.0.0"
+      annotations:
+        ad.datadoghq.com/ruby-crud.logs: '[{"source":"ruby","service":"ruby-crud"}]'
+    spec:
+      containers:
+        - name: ruby-crud
+          image: ruby-crud:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4567
+          env:
+            - { name: DD_SERVICE, value: ruby-crud }
+            - { name: DD_ENV,     value: kubernetes }
+            - { name: DD_VERSION, value: "1.0.0" }
+            - { name: DD_AGENT_HOST,
+                valueFrom: { fieldRef: { fieldPath: status.hostIP } } }
+            - { name: DD_PROFILING_ENABLED,     value: "true" }
+            - { name: DD_DBM_PROPAGATION_MODE,  value: full }
+            - { name: DD_APPSEC_ENABLED,        value: "true" }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ruby-crud
+  namespace: datadog-monitoring
+spec:
+  selector: { app: ruby-crud }
+  ports: [{ port: 80, targetPort: 4567 }]
+
+---
+# ─── Ingress — expõe todos os serviços ───────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: crud-ingress
+  namespace: datadog-monitoring
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /python
+            pathType: Prefix
+            backend:
+              service: { name: python-crud, port: { number: 80 } }
+          - path: /nodejs
+            pathType: Prefix
+            backend:
+              service: { name: nodejs-crud, port: { number: 80 } }
+          - path: /java
+            pathType: Prefix
+            backend:
+              service: { name: java-crud, port: { number: 80 } }
+          - path: /dotnet
+            pathType: Prefix
+            backend:
+              service: { name: dotnet-crud, port: { number: 80 } }
+          - path: /ruby
+            pathType: Prefix
+            backend:
+              service: { name: ruby-crud, port: { number: 80 } }

@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-crud
+  namespace: crud-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: java-crud
+  template:
+    metadata:
+      labels:
+        app: java-crud
+      annotations:
+        ad.datadoghq.com/java-crud.logs: '[{"source":"java","service":"java-crud"}]'
+    spec:
+      containers:
+        - name: java-crud
+          image: docker-java-crud:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_SERVICE
+              value: java-crud
+            - name: DD_ENV
+              value: kubernetes
+            - name: DD_VERSION
+              value: "1.0.0"
+            - name: DD_LOGS_INJECTION
+              value: "true"
+            - name: DD_RUNTIME_METRICS_ENABLED
+              value: "true"
+            - name: DD_PROFILING_ENABLED
+              value: "true"
+            - name: DD_APPSEC_ENABLED
+              value: "true"
+            - name: DD_DBM_PROPAGATION_MODE
+              value: full
+            - name: DATABASE_URL
+              value: jdbc:postgresql://postgres:5432/crud_db
+            - name: DB_USER
+              value: user
+            - name: DB_PASSWORD
+              value: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-crud
+  namespace: crud-app
+spec:
+  type: NodePort
+  selector:
+    app: java-crud
+  ports:
+    - port: 8080
+      nodePort: 30003

@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-crud
+  namespace: crud-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-crud
+  template:
+    metadata:
+      labels:
+        app: python-crud
+      annotations:
+        ad.datadoghq.com/python-crud.logs: '[{"source":"python","service":"python-crud"}]'
+    spec:
+      containers:
+        - name: python-crud
+          image: docker-python-crud:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_SERVICE
+              value: python-crud
+            - name: DD_ENV
+              value: kubernetes
+            - name: DD_VERSION
+              value: "1.0.0"
+            - name: DD_LOGS_INJECTION
+              value: "true"
+            - name: DD_RUNTIME_METRICS_ENABLED
+              value: "true"
+            - name: DD_PROFILING_ENABLED
+              value: "true"
+            - name: DD_APPSEC_ENABLED
+              value: "true"
+            - name: DD_DBM_PROPAGATION_MODE
+              value: full
+            - name: DATABASE_URL
+              value: postgresql://user:password@postgres:5432/crud_db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-crud
+  namespace: crud-app
+spec:
+  type: NodePort
+  selector:
+    app: python-crud
+  ports:
+    - port: 8000
+      nodePort: 30001

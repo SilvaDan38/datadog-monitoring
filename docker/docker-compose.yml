@@ -1,0 +1,221 @@
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  docker-compose.yml — Todos os serviços + Datadog Agent
+#
+#  Uso:
+#    export DD_API_KEY="sua-api-key"
+#    export DD_SITE="datadoghq.com"
+#    docker-compose up --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-datadog-env: &datadog-env
+  DD_AGENT_HOST: datadog-agent
+  DD_TRACE_AGENT_PORT: 8126
+  DD_DOGSTATSD_PORT: 8125
+  DD_LOGS_INJECTION: "true"
+  DD_RUNTIME_METRICS_ENABLED: "true"
+  DD_PROFILING_ENABLED: "true"
+  DD_DBM_PROPAGATION_MODE: full
+  DD_APPSEC_ENABLED: "true"
+  DD_IAST_ENABLED: "true"
+
+services:
+
+  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: crud-postgres
+    environment:
+      POSTGRES_DB: crud_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d crud_db"]
+      interval: 10s
+      retries: 5
+    networks:
+      - crud-network
+    labels:
+      com.datadoghq.ad.check_names:   '["postgres"]'
+      com.datadoghq.ad.init_configs:  '[{}]'
+      com.datadoghq.ad.instances: >
+        [{
+          "host":"%%host%%","port":"5432",
+          "username":"user","password":"password",
+          "dbname":"crud_db",
+          "collect_activity_metrics":true,
+          "collect_database_size_metrics":true,
+          "relations":["products"]
+        }]
+
+  # ─── Datadog Agent ──────────────────────────────────────────────────────────
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:7
+    container_name: datadog-agent
+    pid: host     # <- PID Adicionado
+    environment:
+      DD_API_KEY: ${DD_API_KEY}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_ENV: docker
+      DD_LOGS_ENABLED: "true"
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "true"
+      DD_PROCESS_AGENT_ENABLED: "true"
+      DD_CONTAINER_EXCLUDE: "name:datadog-agent"
+      # APM
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      # DBM — habilita no agente
+      DD_DATABASE_MONITORING_ENABLED: "true"
+      # CNM — Network Performance Monitoring
+      DD_SYSTEM_PROBE_ENABLED: "false"
+      DD_NETWORK_ENABLED: "false"
+      # Security — Runtime
+      DD_RUNTIME_SECURITY_CONFIG_ENABLED: "true"
+      DD_COMPLIANCE_CONFIG_ENABLED: "true"
+      # Coleta do /proc do Docker Desktop
+      DD_COLLECT_PROC_INFO: "true"
+      DD_PROC_ROOT: /host/proc    # ← reforça o path explicitamente
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - /sys/fs/cgroup:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./datadog/conf.d/network.d/conf.yaml:/etc/datadog-agent/conf.d/network.d/conf.yaml  # ← novo
+
+    ports:
+      - "8126:8126"   # APM
+      - "8125:8125/udp"  # StatsD
+    cap_add:
+      - SYS_ADMIN     # necessário para system-probe (CNM)
+      - NET_ADMIN
+      - SYS_RESOURCE
+    security_opt:
+      - apparmor:unconfined
+    networks:
+      - crud-network
+
+  # ─── Python (FastAPI) ────────────────────────────────────────────────────────
+  python-crud:
+    build:
+      context: ../python
+    container_name: python-crud
+    environment:
+      <<: *datadog-env
+      DD_SERVICE: python-crud
+      DD_ENV: docker
+      DD_VERSION: "1.0.0"
+      DATABASE_URL: postgresql://user:password@postgres:5432/crud_db
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:    { condition: service_healthy }
+      datadog-agent: { condition: service_started }
+    networks:
+      - crud-network
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"python","service":"python-crud"}]'
+
+  # ─── Node.js (Express) ───────────────────────────────────────────────────────
+  nodejs-crud:
+    build:
+      context: ../nodejs
+    container_name: nodejs-crud
+    environment:
+      <<: *datadog-env
+      DD_SERVICE: nodejs-crud
+      DD_ENV: docker
+      DD_VERSION: "1.0.0"
+      DATABASE_URL: postgresql://user:password@postgres:5432/crud_db
+      PORT: 3000
+    ports:
+      - "8002:3000"
+    depends_on:
+      postgres:    { condition: service_healthy }
+      datadog-agent: { condition: service_started }
+    networks:
+      - crud-network
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"nodejs","service":"nodejs-crud"}]'
+
+  # ─── Java (Spring Boot) ──────────────────────────────────────────────────────
+  java-crud:
+    build:
+      context: ../java
+    container_name: java-crud
+    environment:
+      <<: *datadog-env
+      DD_SERVICE: java-crud
+      DD_ENV: docker
+      DD_VERSION: "1.0.0"
+      DATABASE_URL: jdbc:postgresql://postgres:5432/crud_db
+      DB_USER: user
+      DB_PASSWORD: password
+    ports:
+      - "8003:8080"
+    depends_on:
+      postgres:    { condition: service_healthy }
+      datadog-agent: { condition: service_started }
+    networks:
+      - crud-network
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"java","service":"java-crud"}]'
+
+  # ─── .NET (ASP.NET Core) ─────────────────────────────────────────────────────
+  dotnet-crud:
+    build:
+      context: ../dotnet
+    container_name: dotnet-crud
+    environment:
+      <<: *datadog-env
+      DD_SERVICE: dotnet-crud
+      DD_ENV: docker
+      DD_VERSION: "1.0.0"
+      DATABASE_URL: "Host=postgres;Database=crud_db;Username=user;Password=password"
+      CORECLR_ENABLE_PROFILING: "1"
+      CORECLR_PROFILER: "{846F5F1C-F9AE-4B07-969E-05C26BC060D8}"
+      CORECLR_PROFILER_PATH: /opt/datadog/Datadog.Trace.ClrProfiler.Native.so
+      DD_DOTNET_TRACER_HOME: /opt/datadog
+    ports:
+      - "8004:8080"
+    depends_on:
+      postgres:    { condition: service_healthy }
+      datadog-agent: { condition: service_started }
+    networks:
+      - crud-network
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"dotnet","service":"dotnet-crud"}]'
+
+  # ─── Ruby (Sinatra) ──────────────────────────────────────────────────────────
+  ruby-crud:
+    build:
+      context: ../ruby
+    container_name: ruby-crud
+    environment:
+      <<: *datadog-env
+      DD_SERVICE: ruby-crud
+      DD_ENV: docker
+      DD_VERSION: "1.0.0"
+      DATABASE_URL: postgresql://user:password@postgres:5432/crud_db
+    ports:
+      - "8005:4567"
+    depends_on:
+      postgres:    { condition: service_healthy }
+      datadog-agent: { condition: service_started }
+    networks:
+      - crud-network
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"ruby","service":"ruby-crud"}]'
+
+volumes:
+  pg_data:
+
+networks:
+  crud-network:
+    driver: bridge
+    # CNM — habilita coleta de métricas de rede entre containers
+    labels:
+      com.datadoghq.ad.network_monitoring: "true"

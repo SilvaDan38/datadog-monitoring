@@ -1,0 +1,15 @@
+---
+# namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: datadog-monitoring
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    admission.datadoghq.com/enabled: "true"  # habilita Admission Controller Datadog
+---
+# secret-datadog.yaml — criar via kubectl:
+# kubectl create secret generic datadog-secret \
+#   --from-literal=api-key=$DD_API_KEY \
+#   --from-literal=app-key=$DD_APP_KEY \
+#   -n datadog-monitoring

@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dotnet-crud
+  namespace: crud-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dotnet-crud
+  template:
+    metadata:
+      labels:
+        app: dotnet-crud
+      annotations:
+        ad.datadoghq.com/dotnet-crud.logs: '[{"source":"dotnet","service":"dotnet-crud"}]'
+    spec:
+      containers:
+        - name: dotnet-crud
+          image: docker-dotnet-crud:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_SERVICE
+              value: dotnet-crud
+            - name: DD_ENV
+              value: kubernetes
+            - name: DD_VERSION
+              value: "1.0.0"
+            - name: DD_LOGS_INJECTION
+              value: "true"
+            - name: DD_RUNTIME_METRICS_ENABLED
+              value: "true"
+            - name: DD_PROFILING_ENABLED
+              value: "true"
+            - name: DD_APPSEC_ENABLED
+              value: "true"
+            - name: CORECLR_ENABLE_PROFILING
+              value: "1"
+            - name: CORECLR_PROFILER
+              value: "{846F5F1C-F9AE-4B07-969E-05C26BC060D8}"
+            - name: CORECLR_PROFILER_PATH
+              value: /opt/datadog/Datadog.Trace.ClrProfiler.Native.so
+            - name: DD_DOTNET_TRACER_HOME
+              value: /opt/datadog
+            - name: DATABASE_URL
+              value: "Host=postgres;Database=crud_db;Username=user;Password=password"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dotnet-crud
+  namespace: crud-app
+spec:
+  type: NodePort
+  selector:
+    app: dotnet-crud
+  ports:
+    - port: 8080
+      nodePort: 30004

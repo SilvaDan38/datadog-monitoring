@@ -1,0 +1,233 @@
+---
+# datadog-agent.yaml — Datadog Agent como DaemonSet + Cluster Agent
+# Habilita: APM, DBM, CNM, Security (CSPM + Runtime Security)
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: datadog-agent
+  namespace: datadog-monitoring
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: datadog-agent
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods, services, endpoints, namespaces, events,
+                componentstatuses, resourcequotas, persistentvolumes,
+                persistentvolumeclaims, serviceaccounts, limitranges]
+    verbs: [list, watch, get]
+  - apiGroups: [apps]
+    resources: [deployments, daemonsets, replicasets, statefulsets]
+    verbs: [list, watch, get]
+  - nonResourceURLs: [/metrics, /healthz, /livez, /readyz]
+    verbs: [get]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: datadog-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: datadog-agent
+subjects:
+  - kind: ServiceAccount
+    name: datadog-agent
+    namespace: datadog-monitoring
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datadog-agent-config
+  namespace: datadog-monitoring
+data:
+  datadog.yaml: |
+    api_key: ""  # vem do Secret
+    site: datadoghq.com
+
+    # APM
+    apm_config:
+      enabled: true
+      apm_non_local_traffic: true
+
+    # DBM
+    database_monitoring:
+      autodiscovery:
+        enabled: true
+
+    # Logs
+    logs_enabled: true
+    logs_config:
+      container_collect_all: true
+      use_http: true
+
+    # Process Agent
+    process_config:
+      enabled: true
+      process_collection:
+        enabled: true
+
+    # NPM / CNM
+    network_config:
+      enabled: true
+
+    # Security
+    runtime_security_config:
+      enabled: true
+      fim_enabled: true          # File Integrity Monitoring
+      network:
+        enabled: true
+    compliance_config:
+      enabled: true              # CSPM
+      check_interval: 20m
+
+    # Cluster checks
+    cluster_agent:
+      enabled: true
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: datadog-agent
+  namespace: datadog-monitoring
+  labels:
+    app: datadog-agent
+spec:
+  selector:
+    matchLabels:
+      app: datadog-agent
+  template:
+    metadata:
+      labels:
+        app: datadog-agent
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/system-probe: unconfined
+    spec:
+      serviceAccountName: datadog-agent
+      hostNetwork: true    # necessário para CNM
+      hostPID: true        # necessário para Runtime Security
+      dnsPolicy: ClusterFirstWithHostNet
+
+      containers:
+        - name: agent
+          image: gcr.io/datadoghq/agent:7
+          imagePullPolicy: Always
+          resources:
+            requests: { memory: 256Mi, cpu: 200m }
+            limits:   { memory: 512Mi, cpu: 500m }
+          ports:
+            - name: apm
+              containerPort: 8126
+              hostPort: 8126
+            - name: statsd
+              containerPort: 8125
+              protocol: UDP
+              hostPort: 8125
+          env:
+            - name: DD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: datadog-secret
+                  key: api-key
+            - name: DD_SITE
+              value: "datadoghq.com"
+            - name: DD_ENV
+              value: "kubernetes"
+            - name: DD_CLUSTER_NAME
+              value: "crud-cluster"
+            - name: DD_KUBERNETES_KUBELET_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_APM_ENABLED
+              value: "true"
+            - name: DD_APM_NON_LOCAL_TRAFFIC
+              value: "true"
+            - name: DD_LOGS_ENABLED
+              value: "true"
+            - name: DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL
+              value: "true"
+            - name: DD_PROCESS_AGENT_ENABLED
+              value: "true"
+            - name: DD_SYSTEM_PROBE_ENABLED
+              value: "true"
+            - name: DD_NETWORK_ENABLED
+              value: "true"
+            - name: DD_RUNTIME_SECURITY_CONFIG_ENABLED
+              value: "true"
+            - name: DD_COMPLIANCE_CONFIG_ENABLED
+              value: "true"
+            - name: DD_COLLECT_KUBERNETES_EVENTS
+              value: "true"
+            - name: DD_LEADER_ELECTION
+              value: "true"
+          volumeMounts:
+            - name: dockersocket
+              mountPath: /var/run/docker.sock
+              readOnly: true
+            - name: procdir
+              mountPath: /host/proc
+              readOnly: true
+            - name: cgroups
+              mountPath: /host/sys/fs/cgroup
+              readOnly: true
+            - name: system-probe-socket
+              mountPath: /var/run/sysprobe
+            - name: logpath
+              mountPath: /var/log/pods
+
+        # system-probe — necessário para CNM e Runtime Security
+        - name: system-probe
+          image: gcr.io/datadoghq/agent:7
+          command: ["/opt/datadog-agent/embedded/bin/system-probe"]
+          securityContext:
+            capabilities:
+              add: [SYS_ADMIN, SYS_RESOURCE, SYS_PTRACE, NET_ADMIN, IPC_LOCK]
+          volumeMounts:
+            - name: procdir
+              mountPath: /host/proc
+              readOnly: true
+            - name: debugfs
+              mountPath: /sys/kernel/debug
+            - name: system-probe-socket
+              mountPath: /var/run/sysprobe
+
+      volumes:
+        - name: dockersocket
+          hostPath: { path: /var/run/docker.sock }
+        - name: procdir
+          hostPath: { path: /proc }
+        - name: cgroups
+          hostPath: { path: /sys/fs/cgroup }
+        - name: debugfs
+          hostPath: { path: /sys/kernel/debug }
+        - name: system-probe-socket
+          emptyDir: {}
+        - name: logpath
+          hostPath: { path: /var/log/pods }
+
+---
+# Service para que os pods encontrem o agent via DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: datadog-agent
+  namespace: datadog-monitoring
+spec:
+  selector:
+    app: datadog-agent
+  ports:
+    - name: apm
+      port: 8126
+      targetPort: 8126
+    - name: statsd
+      port: 8125
+      targetPort: 8125
+      protocol: UDP
+  type: ClusterIP

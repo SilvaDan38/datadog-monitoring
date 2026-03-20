@@ -1,0 +1,4 @@
+com/example/crud/repository/ProductRepository.class
+com/example/crud/Application.class
+com/example/crud/model/Product.class
+com/example/crud/controller/ProductController.class

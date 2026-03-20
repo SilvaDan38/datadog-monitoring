@@ -1,0 +1,58 @@
+datadog:
+  apiKeyExistingSecret: datadog-secret
+  site: datadoghq.com
+  tags:
+    - "env:kubernetes"
+
+  # ── Hostname ── corrige o erro no Kind ──────────────────
+  kubelet:
+    tlsVerify: false
+  clusterName: datadog-cluster
+
+  apm:
+    portEnabled: true
+    socketEnabled: true
+
+  logs:
+    enabled: true
+    containerCollectAll: true
+    autoMultiLineDetection: true
+
+  dogstatsd:
+    useHostPort: true
+    nonLocalTraffic: true
+
+  processAgent:
+    enabled: true
+    processCollection: true
+
+  databaseMonitoring:
+    enabled: true
+
+  networkMonitoring:
+    enabled: true
+
+agents:
+  image:
+    doNotCheckTag: true
+  # Permite que o agent leia o hostname do nó do Kind
+  useHostNetwork: true
+  podAnnotations:
+    ad.datadoghq.com/agent.check_names: '[]'
+  tolerations:
+    - operator: Exists
+
+clusterAgent:
+  enabled: true
+  metricsProvider:
+    enabled: true
+
+  # ── Orchestrator Explorer ────────────────────────────────
+  orchestratorExplorer:
+    enabled: true
+    runInClusterAgent: true
+    extraEnvs:
+      - name: DD_ORCHESTRATOR_EXPLORER_ENABLED
+        value: "true"
+      - name: DD_ORCHESTRATOR_EXPLORER_CONTAINER_SCRUBBING_ENABLED
+        value: "true"

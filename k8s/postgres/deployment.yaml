@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: crud-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+      annotations:
+        ad.datadoghq.com/postgres.check_names:  '["postgres"]'
+        ad.datadoghq.com/postgres.init_configs: '[{}]'
+        ad.datadoghq.com/postgres.instances: |
+          [{
+            "host": "%%host%%",
+            "port": "5432",
+            "username": "user",
+            "password": "password",
+            "dbname": "crud_db",
+            "collect_activity_metrics": true,
+            "collect_database_size_metrics": true
+          }]
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: crud_db
+            - name: POSTGRES_USER
+              value: user
+            - name: POSTGRES_PASSWORD
+              value: password
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "user", "-d", "crud_db"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: crud-app
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432

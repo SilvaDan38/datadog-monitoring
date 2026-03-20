@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datadog Monitoring — Multi-Language CRUD</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --dd-purple: #632CA6;
+    --dd-pink:   #E040A8;
+    --dd-green:  #00C389;
+    --dd-yellow: #FFBF00;
+    --dd-red:    #FF3D60;
+    --bg:        #0A0A12;
+    --surface:   #12121E;
+    --surface2:  #1A1A2E;
+    --border:    #2A2A40;
+    --text:      #E8E8F0;
+    --muted:     #7878A0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Animated background grid ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(99,44,166,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,44,166,0.06) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .content { position: relative; z-index: 1; }
+
+  /* ── Header ── */
+  header {
+    padding: 48px 40px 32px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+  }
+
+  .dd-logo {
+    width: 48px; height: 48px;
+    background: linear-gradient(135deg, var(--dd-purple), var(--dd-pink));
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 20px; font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+    box-shadow: 0 0 30px rgba(99,44,166,0.4);
+  }
+
+  header h1 {
+    font-family: 'Space Mono', monospace;
+    font-size: clamp(18px, 2.5vw, 28px);
+    font-weight: 700;
+    background: linear-gradient(90deg, #fff 0%, var(--dd-pink) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+  }
+
+  header p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+  /* ── Section ── */
+  section { padding: 40px; }
+
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--dd-purple);
+    margin-bottom: 20px;
+  }
+
+  h2 {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 24px;
+    color: var(--text);
+  }
+
+  /* ── Monitor modules grid ── */
+  .monitor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+
+  .monitor-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform .2s, border-color .2s;
+    cursor: default;
+  }
+
+  .monitor-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent-color);
+  }
+
+  .monitor-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent-color);
+  }
+
+  .monitor-card::after {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 150px; height: 150px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    opacity: 0.06;
+    pointer-events: none;
+  }
+
+  .monitor-card[data-type="apm"]  { --accent-color: var(--dd-purple); }
+  .monitor-card[data-type="dbm"]  { --accent-color: var(--dd-green);  }
+  .monitor-card[data-type="cnm"]  { --accent-color: var(--dd-yellow); }
+  .monitor-card[data-type="sec"]  { --accent-color: var(--dd-red);    }
+
+  .monitor-icon {
+    font-size: 28px;
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  .monitor-card h3 {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent-color);
+    margin-bottom: 8px;
+  }
+
+  .monitor-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  .monitor-card ul {
+    margin-top: 12px;
+    list-style: none;
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+
+  .monitor-card ul li {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--accent-color);
+  }
+
+  /* ── Language grid ── */
+  .lang-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 48px;
+  }
+
+  .lang-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: all .2s;
+    cursor: pointer;
+  }
+
+  .lang-card:hover { border-color: rgba(255,255,255,0.2); background: var(--surface2); }
+
+  .lang-card .lang-icon { font-size: 32px; margin-bottom: 10px; display: block; }
+
+  .lang-card h4 {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .lang-card .lang-stack { font-size: 12px; color: var(--muted); }
+
+  .lang-card .lang-port {
+    display: inline-block;
+    margin-top: 10px;
+    background: rgba(99,44,166,0.15);
+    border: 1px solid rgba(99,44,166,0.3);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--dd-purple);
+  }
+
+  /* ── Code block ── */
+  .code-section { margin-bottom: 48px; }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
+    padding: 6px 6px 0;
+    overflow-x: auto;
+  }
+
+  .tab-btn {
+    background: transparent;
+    border: none;
+    padding: 8px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+
+  .tab-btn.active, .tab-btn:hover {
+    background: var(--surface2);
+    color: var(--text);
+  }
+
+  .tab-btn.active { color: var(--dd-pink); }
+
+  .code-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0 0 12px 12px;
+    padding: 24px;
+    overflow-x: auto;
+    display: none;
+  }
+
+  .code-block.active { display: block; }
+
+  pre {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #cdd6f4;
+  }
+
+  .kw  { color: var(--dd-pink); }
+  .cm  { color: var(--muted); font-style: italic; }
+  .str { color: var(--dd-green); }
+  .fn  { color: #89dceb; }
+  .num { color: var(--dd-yellow); }
+
+  /* ── Architecture diagram ── */
+  .arch {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 48px;
+    overflow-x: auto;
+  }
+
+  .arch-diagram {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+    min-width: 600px;
+  }
+
+  .arch-layer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+  }
+
+  .arch-layer + .arch-layer::before {
+    content: '→';
+    position: absolute;
+    left: -18px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--dd-purple);
+    font-size: 20px;
+    z-index: 2;
+  }
+
+  .arch-layer-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+    text-align: center;
+  }
+
+  .arch-node {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    transition: all .2s;
+  }
+
+  .arch-node:hover { border-color: var(--dd-purple); }
+
+  .arch-node .n-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+  .arch-node .n-name { font-weight: 600; display: block; margin-bottom: 2px; }
+  .arch-node .n-sub  { color: var(--muted); font-size: 10px; font-family: 'Space Mono', monospace; }
+
+  .arch-agent {
+    background: linear-gradient(135deg, rgba(99,44,166,0.15), rgba(224,64,168,0.1));
+    border: 1px solid rgba(99,44,166,0.4);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .arch-agent .n-icon { font-size: 28px; }
+  .arch-agent .n-name { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--dd-purple); font-weight: 700; }
+  .arch-agent .n-sub  { color: var(--muted); font-size: 10px; margin-top: 6px; display: block; line-height: 1.8; }
+
+  /* ── Quick start ── */
+  .quickstart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+
+  .qs-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .qs-card h4 {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .qs-badge {
+    background: var(--dd-purple);
+    color: white;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+
+  .qs-card pre {
+    font-size: 11px;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 12px;
+    overflow-x: auto;
+  }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 24px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--muted);
+    font-size: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  footer a {
+    color: var(--dd-purple);
+    text-decoration: none;
+  }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0 40px;
+  }
+</style>
+</head>
+<body>
+<div class="content">
+
+<header>
+  <div class="dd-logo">DD</div>
+  <div>
+    <h1>Datadog Monitoring — Multi-Language CRUD</h1>
+    <p>APM · DBM · CNM · Security &nbsp;|&nbsp; Python · Node.js · Java · .NET · Ruby &nbsp;|&nbsp; Local · Docker · Kubernetes</p>
+  </div>
+</header>
+
+<!-- Monitoring Modules -->
+<section>
+  <div class="section-label">// módulos de monitoramento</div>
+  <div class="monitor-grid">
+
+    <div class="monitor-card" data-type="apm">
+      <span class="monitor-icon">🔭</span>
+      <h3>APM — Application Performance</h3>
+      <p>Traces distribuídos, latência, throughput e profiling contínuo de CPU/memória em todas as linguagens.</p>
+      <ul>
+        <li>Traces</li><li>Spans</li><li>Profiling</li>
+        <li>P99 Latency</li><li>Error Rate</li>
+      </ul>
+    </div>
+
+    <div class="monitor-card" data-type="dbm">
+      <span class="monitor-icon">🗄️</span>
+      <h3>DBM — Database Monitoring</h3>
+      <p>Queries lentas, explain plans automáticos, wait events e correlação direta com traces APM.</p>
+      <ul>
+        <li>Slow Queries</li><li>Explain Plan</li>
+        <li>Wait Events</li><li>Pool Stats</li>
+      </ul>
+    </div>
+
+    <div class="monitor-card" data-type="cnm">
+      <span class="monitor-icon">🌐</span>
+      <h3>CNM — Cloud Network Monitoring</h3>
+      <p>Fluxos TCP/UDP entre pods e serviços, latência de rede, bytes transferidos e mapa de dependências.</p>
+      <ul>
+        <li>Network Flows</li><li>TCP Latency</li>
+        <li>Retransmits</li><li>Service Map</li>
+      </ul>
+    </div>
+
+    <div class="monitor-card" data-type="sec">
+      <span class="monitor-icon">🔐</span>
+      <h3>Security — ASM + CWS + CSPM</h3>
+      <p>Proteção em runtime contra ataques (AppSec), detecção de ameaças (CWS) e postura de segurança (CSPM).</p>
+      <ul>
+        <li>AppSec/RASP</li><li>IAST</li>
+        <li>CWS</li><li>CSPM/CIS</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- Languages -->
+  <div class="section-label">// linguagens</div>
+  <div class="lang-grid">
+    <div class="lang-card">
+      <span class="lang-icon">🐍</span>
+      <h4>Python</h4>
+      <div class="lang-stack">FastAPI · SQLAlchemy · ddtrace</div>
+      <span class="lang-port">:8001</span>
+    </div>
+    <div class="lang-card">
+      <span class="lang-icon">🟢</span>
+      <h4>Node.js</h4>
+      <div class="lang-stack">Express · Sequelize · dd-trace</div>
+      <span class="lang-port">:8002</span>
+    </div>
+    <div class="lang-card">
+      <span class="lang-icon">☕</span>
+      <h4>Java</h4>
+      <div class="lang-stack">Spring Boot · JPA · dd-java-agent</div>
+      <span class="lang-port">:8003</span>
+    </div>
+    <div class="lang-card">
+      <span class="lang-icon">🔷</span>
+      <h4>.NET</h4>
+      <div class="lang-stack">ASP.NET Core · EF Core · Datadog.Trace</div>
+      <span class="lang-port">:8004</span>
+    </div>
+    <div class="lang-card">
+      <span class="lang-icon">💎</span>
+      <h4>Ruby</h4>
+      <div class="lang-stack">Sinatra · ActiveRecord · ddtrace</div>
+      <span class="lang-port">:8005</span>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Architecture -->
+<section>
+  <div class="section-label">// arquitetura</div>
+  <div class="arch">
+    <div class="arch-diagram">
+
+      <div class="arch-layer" style="max-width:160px">
+        <div class="arch-layer-title">Cliente</div>
+        <div class="arch-node">
+          <span class="n-icon">🌍</span>
+          <span class="n-name">HTTP Client</span>
+          <span class="n-sub">curl / Postman</span>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="arch-layer-title">Serviços CRUD</div>
+        <div class="arch-node"><span class="n-icon">🐍</span><span class="n-name">Python</span><span class="n-sub">FastAPI :8001</span></div>
+        <div class="arch-node"><span class="n-icon">🟢</span><span class="n-name">Node.js</span><span class="n-sub">Express :8002</span></div>
+        <div class="arch-node"><span class="n-icon">☕</span><span class="n-name">Java</span><span class="n-sub">Spring :8003</span></div>
+        <div class="arch-node"><span class="n-icon">🔷</span><span class="n-name">.NET</span><span class="n-sub">ASP.NET :8004</span></div>
+        <div class="arch-node"><span class="n-icon">💎</span><span class="n-name">Ruby</span><span class="n-sub">Sinatra :8005</span></div>
+      </div>
+
+      <div class="arch-layer" style="max-width:150px">
+        <div class="arch-layer-title">Banco</div>
+        <div class="arch-node" style="flex:1">
+          <span class="n-icon">🐘</span>
+          <span class="n-name">PostgreSQL</span>
+          <span class="n-sub">:5432</span>
+        </div>
+      </div>
+
+      <div class="arch-layer" style="max-width:180px">
+        <div class="arch-layer-title">Observabilidade</div>
+        <div class="arch-agent">
+          <span class="n-icon">🐶</span>
+          <span class="n-name">Datadog Agent</span>
+          <span class="n-sub">
+            APM :8126<br>
+            StatsD :8125<br>
+            System Probe<br>
+            Log Collector
+          </span>
+        </div>
+      </div>
+
+      <div class="arch-layer" style="max-width:140px">
+        <div class="arch-layer-title">Datadog Cloud</div>
+        <div class="arch-node"><span class="n-icon">🔭</span><span class="n-name">APM</span></div>
+        <div class="arch-node"><span class="n-icon">🗄️</span><span class="n-name">DBM</span></div>
+        <div class="arch-node"><span class="n-icon">🌐</span><span class="n-name">CNM</span></div>
+        <div class="arch-node"><span class="n-icon">🔐</span><span class="n-name">Security</span></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Code Examples -->
+<section>
+  <div class="section-label">// exemplos de código</div>
+  <div class="code-section">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTab('python')">🐍 Python</button>
+      <button class="tab-btn" onclick="showTab('nodejs')">🟢 Node.js</button>
+      <button class="tab-btn" onclick="showTab('java')">☕ Java</button>
+      <button class="tab-btn" onclick="showTab('dotnet')">🔷 .NET</button>
+      <button class="tab-btn" onclick="showTab('ruby')">💎 Ruby</button>
+    </div>
+
+    <div class="code-block active" id="tab-python">
+<pre><span class="cm"># Python — span customizado com tags de negócio</span>
+<span class="kw">from</span> ddtrace <span class="kw">import</span> tracer
+
+<span class="kw">@app</span>.post(<span class="str">"/products"</span>)
+<span class="kw">def</span> <span class="fn">create_product</span>(payload: ProductCreate, db = Depends(get_db)):
+    <span class="kw">with</span> tracer.trace(<span class="str">"products.create"</span>, resource=<span class="str">"POST /products"</span>) <span class="kw">as</span> span:
+        span.set_tag(<span class="str">"product.name"</span>,  payload.name)
+        span.set_tag(<span class="str">"product.price"</span>, payload.price)
+        span.set_tag(<span class="str">"product.category"</span>, payload.category)
+
+        product = Product(**payload.dict())
+        db.add(product)
+        db.commit()
+
+        span.set_tag(<span class="str">"product.id"</span>, product.id)  <span class="cm"># ID gerado</span>
+        <span class="kw">return</span> product
+
+<span class="cm"># Execução com tracer:
+# DD_SERVICE=python-crud DD_ENV=local ddtrace-run uvicorn main:app</span></pre>
+    </div>
+
+    <div class="code-block" id="tab-nodejs">
+<pre><span class="cm">// Node.js — inicialização e span customizado</span>
+<span class="kw">const</span> tracer = <span class="fn">require</span>(<span class="str">'dd-trace'</span>).<span class="fn">init</span>({
+  service:    <span class="str">'nodejs-crud'</span>,
+  env:        process.env.DD_ENV || <span class="str">'local'</span>,
+  logInjection:    <span class="kw">true</span>,   <span class="cm">// correlaciona logs ↔ traces</span>
+  profiling:       <span class="kw">true</span>,
+  dbmPropagationMode: <span class="str">'full'</span>,  <span class="cm">// DBM</span>
+  appsec: { enabled: <span class="kw">true</span> }    <span class="cm">// AppSec</span>
+});
+
+app.<span class="fn">post</span>(<span class="str">'/products'</span>, <span class="kw">async</span> (req, res) => {
+  <span class="kw">const</span> span = tracer.<span class="fn">startSpan</span>(<span class="str">'products.create'</span>);
+  <span class="kw">try</span> {
+    <span class="kw">const</span> product = <span class="kw">await</span> Product.<span class="fn">create</span>(req.body);
+    span.<span class="fn">setTag</span>(<span class="str">'product.id'</span>, product.id);
+    res.<span class="fn">status</span>(<span class="num">201</span>).<span class="fn">json</span>(product);
+  } <span class="kw">finally</span> {
+    span.<span class="fn">finish</span>();
+  }
+});
+
+<span class="cm">// Execução:
+// node -r dd-trace/init server.js</span></pre>
+    </div>
+
+    <div class="code-block" id="tab-java">
+<pre><span class="cm">// Java — @Trace annotation + span manual</span>
+<span class="kw">import</span> datadog.trace.api.Trace;
+<span class="kw">import</span> datadog.trace.api.GlobalTracer;
+
+<span class="kw">@PostMapping</span>(<span class="str">"/products"</span>)
+<span class="kw">@Trace</span>(operationName = <span class="str">"products.create"</span>,
+       resourceName  = <span class="str">"POST /products"</span>)
+<span class="kw">public</span> ResponseEntity&lt;Product&gt; <span class="fn">createProduct</span>(@RequestBody Product p) {
+    Tracer tracer = GlobalTracer.<span class="fn">get</span>();
+    Span span = tracer.<span class="fn">activeSpan</span>();
+
+    <span class="kw">if</span> (span != <span class="kw">null</span>) {
+        span.<span class="fn">setTag</span>(<span class="str">"product.name"</span>,  p.<span class="fn">getName</span>());
+        span.<span class="fn">setTag</span>(<span class="str">"product.price"</span>, p.<span class="fn">getPrice</span>());
+    }
+
+    Product saved = repository.<span class="fn">save</span>(p);
+    <span class="kw">return</span> ResponseEntity.<span class="fn">status</span>(HttpStatus.CREATED).<span class="fn">body</span>(saved);
+}
+
+<span class="cm">// Execução:
+// java -javaagent:dd-java-agent.jar \
+//      -Ddd.service=java-crud \
+//      -jar app.jar</span></pre>
+    </div>
+
+    <div class="code-block" id="tab-dotnet">
+<pre><span class="cm">// .NET — Minimal API com span customizado</span>
+<span class="kw">using</span> Datadog.Trace;
+
+app.<span class="fn">MapPost</span>(<span class="str">"/products"</span>, <span class="kw">async</span> (ProductCreateDto dto, AppDbContext db) => {
+    <span class="kw">using var</span> scope = Tracer.Instance.<span class="fn">StartActive</span>(<span class="str">"products.create"</span>);
+
+    scope.Span.<span class="fn">SetTag</span>(<span class="str">"product.name"</span>,  dto.Name);
+    scope.Span.<span class="fn">SetTag</span>(<span class="str">"product.price"</span>, dto.Price);
+
+    <span class="kw">var</span> product = <span class="kw">new</span> <span class="fn">Product</span> { Name = dto.Name, Price = dto.Price };
+    db.Products.<span class="fn">Add</span>(product);
+    <span class="kw">await</span> db.<span class="fn">SaveChangesAsync</span>();
+
+    scope.Span.<span class="fn">SetTag</span>(<span class="str">"product.id"</span>, product.Id);
+    <span class="kw">return</span> Results.<span class="fn">Created</span>(<span class="str">$"/products/{product.Id}"</span>, product);
+});
+
+<span class="cm">// Auto-instrumentação via variáveis de ambiente:
+// CORECLR_ENABLE_PROFILING=1
+// CORECLR_PROFILER={846F5F1C-F9AE-4B07-969E-05C26BC060D8}</span></pre>
+    </div>
+
+    <div class="code-block" id="tab-ruby">
+<pre><span class="cm"># Ruby — Datadog::Tracing.trace</span>
+<span class="kw">require</span> <span class="str">'ddtrace'</span>
+
+post <span class="str">'/products'</span> <span class="kw">do</span>
+  Datadog::Tracing.<span class="fn">trace</span>(<span class="str">'products.create'</span>,
+                          resource: <span class="str">'POST /products'</span>) <span class="kw">do</span> |span|
+
+    body_data = JSON.<span class="fn">parse</span>(request.body.read)
+    product = Product.<span class="fn">new</span>(body_data.<span class="fn">slice</span>(<span class="str">'name'</span>, <span class="str">'price'</span>, <span class="str">'category'</span>))
+
+    <span class="kw">unless</span> product.<span class="fn">save</span>
+      halt <span class="num">422</span>, <span class="fn">json</span>(errors: product.errors.full_messages)
+    <span class="kw">end</span>
+
+    span.<span class="fn">set_tag</span>(<span class="str">'product.id'</span>,   product.id)
+    span.<span class="fn">set_tag</span>(<span class="str">'product.name'</span>, product.name)
+
+    status <span class="num">201</span>
+    <span class="fn">json</span> product.<span class="fn">as_json</span>
+  <span class="kw">end</span>
+<span class="kw">end</span>
+
+<span class="cm"># Execução:
+# ddtracerb exec ruby app.rb</span></pre>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Quick Start -->
+<section>
+  <div class="section-label">// quick start</div>
+  <div class="quickstart-grid">
+
+    <div class="qs-card">
+      <h4><span class="qs-badge">1</span> Local</h4>
+<pre><span class="cm"># Pré-requisito: PostgreSQL rodando
+export DD_API_KEY="sua-api-key"
+export DD_ENV="local"
+
+# Python
+cd python
+pip install -r requirements.txt
+DD_SERVICE=python-crud \
+  ddtrace-run uvicorn main:app --reload
+
+# Node.js
+cd nodejs && npm install
+DD_SERVICE=nodejs-crud \
+  node -r dd-trace/init server.js</span></pre>
+    </div>
+
+    <div class="qs-card">
+      <h4><span class="qs-badge">2</span> Docker</h4>
+<pre><span class="cm">export DD_API_KEY="sua-api-key"
+export DD_SITE="datadoghq.com"
+
+cd docker
+docker-compose up --build
+
+# Serviços:
+# Python  → localhost:8001
+# Node.js → localhost:8002
+# Java    → localhost:8003
+# .NET    → localhost:8004
+# Ruby    → localhost:8005</span></pre>
+    </div>
+
+    <div class="qs-card">
+      <h4><span class="qs-badge">3</span> Kubernetes</h4>
+<pre><span class="cm">kubectl apply -f kubernetes/namespace.yaml
+
+kubectl create secret generic datadog-secret \
+  --from-literal=api-key=$DD_API_KEY \
+  -n datadog-monitoring
+
+kubectl apply -f kubernetes/datadog-agent.yaml
+kubectl apply -f kubernetes/deployments.yaml
+
+kubectl get pods -n datadog-monitoring</span></pre>
+    </div>
+
+    <div class="qs-card">
+      <h4><span class="qs-badge">✓</span> Testar CRUD</h4>
+<pre><span class="cm"># Criar produto
+curl -X POST localhost:8001/products \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Notebook","price":4999.90,"stock":10}'
+
+# Listar
+curl localhost:8001/products
+
+# Atualizar
+curl -X PUT localhost:8001/products/1 \
+  -d '{"price":4499.90}'
+
+# Remover
+curl -X DELETE localhost:8001/products/1</span></pre>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  <span>🐶 Datadog Monitoring — Multi-Language CRUD &nbsp;·&nbsp; v1.0.0</span>
+  <div style="display:flex;gap:20px">
+    <a href="https://docs.datadoghq.com/tracing/" target="_blank">APM Docs</a>
+    <a href="https://docs.datadoghq.com/database_monitoring/" target="_blank">DBM Docs</a>
+    <a href="https://docs.datadoghq.com/network_monitoring/" target="_blank">CNM Docs</a>
+    <a href="https://docs.datadoghq.com/security/" target="_blank">Security Docs</a>
+  </div>
+</footer>
+
+</div>
+
+<script>
+function showTab(lang) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.code-block').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + lang).classList.add('active');
+}
+</script>
+</body>
+</html>

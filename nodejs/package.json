@@ -1,0 +1,24 @@
+{
+  "name": "nodejs-crud-datadog",
+  "version": "1.0.0",
+  "description": "Node.js CRUD com monitoramento Datadog (APM, DBM, Security)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node -r dd-trace/init server.js",
+    "dev": "nodemon --require dd-trace/init server.js",
+    "start:local": "DD_SERVICE=nodejs-crud DD_ENV=local node -r dd-trace/init server.js"
+  },
+  "dependencies": {
+    "dd-trace": "^5.14.0",
+    "express": "^4.19.2",
+    "sequelize": "^6.37.3",
+    "pg": "^8.11.5",
+    "pg-hstore": "^2.3.4",
+    "dotenv": "^16.4.5",
+    "hot-shots": "^10.0.0",
+    "winston": "^3.13.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
