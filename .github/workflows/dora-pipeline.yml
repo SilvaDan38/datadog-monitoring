@@ -32,6 +32,18 @@ jobs:
       - name: Run traffic tests
         run: |
           ./scripts/test-crud.sh
+        
+      - name: Stop environment
+        if: always()
+        run: docker compose -f docker/docker-compose.yml down -v
+
+      - name: Dump logs
+        if: failure()
+        run: docker compose -f docker/docker-compose.yml logs
+
+      - name: Docker system prune
+        if: always()
+        run: docker system prune -af
 
       - name: Send custom deployment event to Datadog
         run: |
