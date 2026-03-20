@@ -1,0 +1,43 @@
+name: DORA Monitoring Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  DD_API_KEY: ${{ secrets.DD_API_KEY }}
+
+jobs:
+  build-deploy-test:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build containers
+        run: docker compose build
+
+      - name: Start environment
+        run: docker compose up -d
+
+      - name: Wait services
+        run: sleep 25
+
+      - name: Run traffic tests
+        run: |
+          chmod +x scripts/*.sh
+          ./scripts/testa-tudo.sh
+
+      - name: Send custom deployment event to Datadog
+        run: |
+          curl -X POST "https://api.datadoghq.com/api/v1/events" \
+          -H "Content-type: application/json" \
+          -H "DD-API-KEY: $DD_API_KEY" \
+          -d '{
+            "title": "Deployment executed",
+            "text": "New deployment from GitHub Actions",
+            "tags": ["env:lab","service:datadog-monitoring","dora:deployment"]
+          }'
