@@ -17,11 +17,18 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Record deploy start time
+        id: deploy_start
+        run: echo "started_at=$(date -u +%s)" >> $GITHUB_OUTPUT
+
       - name: Build containers
         run: docker compose -f docker/docker-compose.yml build
 
       - name: Start environment
         run: docker compose -f docker/docker-compose.yml up -d
+
+      - name: Install datadog-ci
+        run: npm install -g @datadog/datadog-ci
       
       - name: Wait services
         run: sleep 25
@@ -45,13 +52,31 @@ jobs:
         if: always()
         run: docker system prune -af
 
-      - name: Send custom deployment event to Datadog
+      - name: DORA — Deploy sucesso
+        if: success()
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_SITE: datadoghq.com
         run: |
-          curl -X POST "https://api.datadoghq.com/api/v1/events" \
-          -H "Content-type: application/json" \
-          -H "DD-API-KEY: $DD_API_KEY" \
-          -d '{
-            "title": "Deployment executed",
-            "text": "New deployment from GitHub Actions",
-            "tags": ["env:lab","service:datadog-monitoring","dora:deployment"]
-          }'
+          datadog-ci dora deployment \
+            --service nodejs-crud \
+            --env lab \
+            --started-at ${{ steps.deploy_start.outputs.started_at }} \
+            --finished-at $(date -u +%s) \
+            --git-repository-url https://github.com/SilvaDan38/datadog-monitoring \
+            --git-commit-sha ${{ github.sha }}
+
+      - name: DORA — Deploy falha
+        if: failure()
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_SITE: datadoghq.com
+        run: |
+          datadog-ci dora deployment \
+            --service nodejs-crud \
+            --env lab \
+            --started-at ${{ steps.deploy_start.outputs.started_at }} \
+            --finished-at $(date -u +%s) \
+            --git-repository-url https://github.com/SilvaDan38/datadog-monitoring \
+            --git-commit-sha ${{ github.sha }} \
+            --is-failure
