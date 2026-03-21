@@ -52,6 +52,12 @@ jobs:
         if: always()
         run: docker system prune -af
 
+      - name: Upload coverage reports to Datadog
+        uses: DataDog/coverage-upload-github-action@v1
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          site: datadoghq.com
+
       - name: DORA — Deploy sucesso
         if: success()
         env:
