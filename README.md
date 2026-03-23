@@ -144,7 +144,7 @@ Este laboratório tem como objetivo estudar:
 
 ## 👨‍💻 Autor
 
-Powered by Danilo Silva - Especialista em Observabilidade - Pré-Sales Engineer Datadog
+Powered by Danilo Silva - Especialista em Observabilidade - Pré-Sales Engineer Datadog - ***
 
 Print do Ambiente pós instrumentação:
 <img width="1365" height="393" alt="image" src="https://github.com/user-attachments/assets/89b30703-cae0-434c-8fc6-89b7e299b19e" />
